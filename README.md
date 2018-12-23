@@ -2,7 +2,7 @@
 
 Based on the excellent cber project developed by Dariusz Stojaczyk (https://github.com/darsto/cber). There were just a few minor issues with his code that were needed to allow multiple OID reading.
 
-Dariusz Stojaczyk's originl code focused on the BER coding, and he hadn't really hyped how fully-featured his SNMPv1 code was. He is doing his project a great disservice but not doing that!
+Dariusz Stojaczyk's originl code focused on the BER coding, and he hadn't really hyped how fully-featured his SNMPv1 code was. He is doing his project a great disservice by not doing that!
 
 With just a few minor changes I was able to adapt it to request a dozen or so OIDs at once!
 
