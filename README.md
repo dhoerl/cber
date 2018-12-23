@@ -29,3 +29,5 @@ BOOL foo = [g readResponseWaitingDispatch:2];   // waiting 2 seconds here, resul
 // Currently you can add log messages to see what is returned - see devices[@"192.168.7.101"]
 
 ```
+
+NOTE: ultimately I will make all the C functions static (both .h/.c), leave the .h include as is, then import the .c file at the bottom of the .m class. This will make all of these functions private to the ObjC class and prevent name space pollution in any app using the code.
