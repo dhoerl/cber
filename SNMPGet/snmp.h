@@ -16,8 +16,12 @@
 enum snmp_data_type {
     SNMP_DATA_T_INTEGER = 0x02,
     SNMP_DATA_T_OCTET_STRING = 0x04,
+    SNMP_DATA_T_INTERNET = 0x40,
+    SNMP_DATA_T_COUNTER = 0x41,
+    SNMP_DATA_T_GAUGE = 0x42,
+    SNMP_DATA_T_TIMETICKS = 0x43,
     SNMP_DATA_T_NULL = 0x05,
-    
+
     SNMP_DATA_T_OBJECT = 0x06,
     SNMP_DATA_T_SEQUENCE = 0x30,
 
@@ -31,7 +35,7 @@ enum snmp_data_type {
 /** Header data for SNMP message */
 struct snmp_msg_header {
     uint32_t snmp_ver;
-    const char *community;
+    char *community;
     enum snmp_data_type pdu_type;
     uint32_t request_id;
     uint32_t error_status;
@@ -44,7 +48,7 @@ struct snmp_varbind {
     enum snmp_data_type value_type;
     union snmp_varbind_val {
         uint32_t i;
-        const char *s;
+        char *s;
     } value;
 };
 
@@ -75,13 +79,10 @@ uint8_t *snmp_encode_oid(uint8_t *out, uint32_t *oid);
  * @param oid array to be filled by this function. The OID will be terminated
  * with SNMP_MSG_OID_END. In case this function returns NULL, the content of
  * this param is undefined.
- * @param oid_len pointer to max size of *oid* array. Underlying value will
- * be replaced with the actual, decoded OID length. In case this function
- * returns NULL, the content of this param is undefined.
  * @return pointer to the next empty byte in the given buffer or NULL in case
  * BER object length is invalid or malloc() failed.
  */
-uint8_t *snmp_decode_oid(uint8_t *buf, uint32_t buf_len, uint32_t *oid, uint32_t *oid_len);
+uint8_t *snmp_decode_oid(uint8_t *buf, uint32_t buf_len, uint32_t *oid);
 
 /**
  * Encode given SNMP message (GetRequest, GetNextRequest, GetResponse, SetRequest).
@@ -114,7 +115,7 @@ uint8_t *snmp_encode_msg(uint8_t *out, struct snmp_msg_header *header,
  * returns NULL, the content of this param is undefined.
  * @param varbinds pointer to array of varbinds to be decoded. All strings will
  * be taken directly from input buffer, without any additional allocation.
- * @return
+ * @return pointer to the last byte processed. Should be true that it == (buf_end + 1)
  */
 uint8_t *snmp_decode_msg(uint8_t *buf, uint32_t buf_len, struct snmp_msg_header *header,
                          uint32_t *varbind_num, struct snmp_varbind *varbinds);
@@ -124,3 +125,4 @@ uint8_t *snmp_decode_msg(uint8_t *buf, uint32_t buf_len, struct snmp_msg_header 
 #endif
 
 #endif //BER_SNMP_H
+

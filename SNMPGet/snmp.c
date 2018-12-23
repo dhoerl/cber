@@ -4,9 +4,12 @@
  * that can be found in the LICENSE file.
  */
 
-#include <stdlib.h>
-#include <stdarg.h>
+// Not needed in macOS
+//#include <stdio.h>
+//#include <stdarg.h>
+#include <stdlib.h> // div_t
 #include <string.h>
+
 #include "ber.h"
 #include "snmp.h"
 
@@ -34,16 +37,17 @@ snmp_encode_oid(uint8_t *out, uint32_t *oid)
 }
 
 uint8_t *
-snmp_decode_oid(uint8_t *buf, uint32_t buf_len, uint32_t *oid, uint32_t *oid_len)
+snmp_decode_oid(uint8_t *buf, uint32_t buf_len, uint32_t *oid)
 {
-    uint32_t *oid_start = oid;
+    uint32_t oid_len = SNMP_MSG_OID_LEN;
     uint8_t *buf_end;
     uint32_t len;
     div_t first;
 
+
     buf++; /* ignore ber type, assume it's an object */
     buf = ber_decode_length(buf, &len);
-    if (buf == NULL || len + 2 > buf_len) {
+    if (buf == NULL || (len + 2) > buf_len) {
         return NULL;
     }
 
@@ -54,17 +58,15 @@ snmp_decode_oid(uint8_t *buf, uint32_t buf_len, uint32_t *oid, uint32_t *oid_len
     *oid++ = (uint32_t) first.rem;
 
     while (buf != buf_end) {
-        --(*oid_len);
-        if (*oid_len == 0) {
+        --(oid_len);
+        if (oid_len == 0) {
             return NULL;
         }
 
         buf = ber_decode_vlint(buf, oid);
         ++oid;
     }
-
     *oid++ = SNMP_MSG_OID_END;
-    *oid_len = (uint32_t) (oid - oid_start);
 
     return buf;
 }
@@ -85,6 +87,10 @@ snmp_encode_msg(uint8_t *out, struct snmp_msg_header *header,
 
         switch (varbind->value_type) {
             case SNMP_DATA_T_INTEGER:
+            case SNMP_DATA_T_COUNTER:
+            case SNMP_DATA_T_GAUGE:
+            case SNMP_DATA_T_TIMETICKS:
+            case SNMP_DATA_T_INTERNET:
                 out = ber_encode_int(out, varbind->value.i);
                 break;
             case SNMP_DATA_T_OCTET_STRING:
@@ -127,9 +133,10 @@ uint8_t *
 snmp_decode_msg(uint8_t *buf, uint32_t buf_len, struct snmp_msg_header *header,
                 uint32_t *varbind_num, struct snmp_varbind *varbinds)
 {
+    //uint8_t *orig_buf = buf;
+    uint8_t *buf_end = buf + buf_len;
     uint8_t *out_start = buf;
-    uint32_t remaining_len, new_remaining_len, oid_len = SNMP_MSG_OID_LEN, i;
-    uint8_t next;
+    uint32_t remaining_len, new_remaining_len, i;
 
     ++buf; /* ignore ber type, assume it's a sequence */
     buf = ber_decode_length(buf, &remaining_len);
@@ -149,12 +156,11 @@ snmp_decode_msg(uint8_t *buf, uint32_t buf_len, struct snmp_msg_header *header,
     remaining_len -= buf - out_start;
     remaining_len &= -!(remaining_len & 0x80000000); /* dont underflow */
     out_start = buf;
-    buf = ber_decode_string_buffer(buf, &header->community, remaining_len, &next);
+    buf = ber_decode_string_buffer(buf, &header->community, remaining_len);
     if (buf == NULL) {
         return NULL;
     }
-
-    header->pdu_type = (enum snmp_data_type) next;
+    header->pdu_type = (enum snmp_data_type)buf[0];
     if (header->pdu_type != SNMP_DATA_T_PDU_GET_REQUEST &&
         header->pdu_type != SNMP_DATA_T_PDU_GET_NEXT_REQUEST &&
         header->pdu_type != SNMP_DATA_T_PDU_GET_RESPONSE &&
@@ -205,7 +211,8 @@ snmp_decode_msg(uint8_t *buf, uint32_t buf_len, struct snmp_msg_header *header,
         return NULL;
     }
 
-    for (i = 0; remaining_len > 0 && i < *varbind_num; ++i) {
+    int max_count = *varbind_num;
+    for (i = 0; buf < buf_end && i < max_count; ++i) {
         buf++; /* ignore ber type, assume it's a sequence */
         buf = ber_decode_length(buf, &new_remaining_len);
         if (buf == NULL) {
@@ -220,38 +227,43 @@ snmp_decode_msg(uint8_t *buf, uint32_t buf_len, struct snmp_msg_header *header,
             return NULL;
         }
 
-        buf = snmp_decode_oid(buf, new_remaining_len, varbinds[i].oid, &oid_len);
+        if (new_remaining_len == 0) {
+            break;
+        }
+
+        buf = snmp_decode_oid(buf, new_remaining_len, varbinds[i].oid);
         if (buf == NULL) {
             return NULL;
         }
 
         varbinds[i].value_type = (enum snmp_data_type) *buf;
         switch (varbinds[i].value_type) {
-            case SNMP_DATA_T_INTEGER:
-                buf = ber_decode_int(buf, &varbinds[i].value.i);
-                break;
-            case SNMP_DATA_T_OCTET_STRING:
-                new_remaining_len -= buf - out_start;
-                new_remaining_len &= -!(new_remaining_len & 0x80000000);
-                buf = ber_decode_string_buffer(buf, &varbinds[i].value.s, new_remaining_len, &next);
-                break;
-            case SNMP_DATA_T_NULL:
-                buf = ber_decode_null(buf);
-                break;
-            default:
-                return NULL;
+        case SNMP_DATA_T_INTEGER:
+        case SNMP_DATA_T_COUNTER:
+        case SNMP_DATA_T_GAUGE:
+        case SNMP_DATA_T_TIMETICKS:
+        case SNMP_DATA_T_INTERNET:
+            buf = ber_decode_int(buf, &varbinds[i].value.i);
+            break;
+        case SNMP_DATA_T_OCTET_STRING:
+            new_remaining_len -= buf - out_start;
+            new_remaining_len &= -!(new_remaining_len & 0x80000000);
+            buf = ber_decode_string_buffer(buf, &varbinds[i].value.s, new_remaining_len);
+            break;
+        case SNMP_DATA_T_NULL:
+            buf = ber_decode_null(buf);
+            break;
+        default:
+            return NULL;
         }
+
+        *varbind_num = i + 1;
 
         if (buf == NULL) {
             return NULL;
         }
-
-        remaining_len -= buf - out_start;
-        remaining_len &= -!(remaining_len & 0x80000000);
-        out_start = buf;
     }
-
-    *varbind_num = i;
 
     return buf;
 }
+

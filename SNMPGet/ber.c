@@ -4,11 +4,13 @@
  * that can be found in the LICENSE file.
  */
 
-#include <stdio.h>
+// Not needed on macOS
+//#include <string.h>
+//#include <stdio.h>
+//#include <assert.h>
+//#include <stdarg.h>
+//#include <stdlib.h>
 #include <memory.h>
-#include <assert.h>
-#include <stdarg.h>
-#include <stdlib.h>
 #include "ber.h"
 
 uint8_t *
@@ -68,6 +70,10 @@ ber_decode_int(uint8_t *buf, uint32_t *num)
 {
     uint8_t i, len;
 
+    if (buf == NULL) {
+        return NULL;
+    }
+
     buf++; /* ignore ber type, assume it's integer */
     len = *buf++;
     if (len > 4) {
@@ -109,6 +115,10 @@ ber_decode_length(uint8_t *buf, uint32_t *length)
 {
     uint8_t i, length_bytes;
 
+    if (buf == NULL) {
+        return NULL;
+    }
+
     if ((*buf & 0x80) == 0) {
         *length = (uint32_t) *buf++;
         return buf;
@@ -129,7 +139,7 @@ ber_decode_length(uint8_t *buf, uint32_t *length)
 }
 
 uint8_t *
-ber_encode_string_len(uint8_t *out, const char *str, uint32_t str_len)
+ber_encode_string_len(uint8_t *out, char *str, uint32_t str_len)
 {
     uint32_t i;
 
@@ -145,7 +155,7 @@ ber_encode_string_len(uint8_t *out, const char *str, uint32_t str_len)
 }
 
 uint8_t *
-ber_encode_string(uint8_t *out, const char *str)
+ber_encode_string(uint8_t *out, char *str)
 {
     uint32_t str_len = (uint32_t) strlen(str);
 
@@ -153,56 +163,64 @@ ber_encode_string(uint8_t *out, const char *str)
 }
 
 uint8_t *
-ber_decode_string_len_buffer(uint8_t *buf, const char **str, uint32_t *str_len)
+ber_decode_string_len_buffer(uint8_t *buf, char **str, uint32_t *str_len)
 {
     buf++;  /* ignore ber type, assume it's string */
     buf = ber_decode_length(buf, str_len);
     if (buf == NULL) {
         return NULL;
     }
-
-    *str = (const char *) buf;
-
-    return buf + *str_len;
+    uint32_t len = *str_len;
+    memmove(buf-1, buf, len);
+    *str = (char *)buf-1;
+    (*str)[len] = '\0';
+    return buf + len;
 }
 
 uint8_t *
-ber_decode_string_buffer(uint8_t *buf, const char **str, uint32_t maxlen, uint8_t *next)
+ber_decode_string_buffer(uint8_t *buf, char **str, uint32_t maxlen)
 {
     uint32_t str_len;
 
+#if 1
+    // This wont work as string not nil terminated
+    // Could move it back one position in buffer, then null terminate it, but then original buffer is clobbered
     buf = ber_decode_string_len_buffer(buf, str, &str_len);
     if (buf == NULL || str_len > maxlen) {
         return NULL;
     }
+#else
+    buf = ber_decode_string_alloc(buf, (char **)str, maxlen);
+    if (buf == NULL) {
+        return NULL;
+    }
 
-    *next = *buf;
-    *buf = 0;
+#endif
 
     return buf;
 }
 
-uint8_t *
-ber_decode_string_alloc(uint8_t *buf, char **str, uint32_t maxlen)
-{
-    uint32_t str_len;
-
-    buf++;  /* ignore ber type, assume it's string */
-    buf = ber_decode_length(buf, &str_len);
-    if (buf == NULL || str_len > maxlen) {
-        return NULL;
-    }
-
-    *str = malloc(str_len + 1); /* +1 for NUL */
-    if (*str == NULL) {
-        return NULL;
-    }
-
-    memcpy(*str, buf, str_len);
-    (*str)[str_len] = 0;
-
-    return buf + str_len;
-}
+//uint8_t *
+//ber_decode_string_alloc(uint8_t *buf, char **str, uint32_t maxlen)
+//{
+//    uint32_t str_len;
+//
+//    buf++;  /* ignore ber type, assume it's string */
+//    buf = ber_decode_length(buf, &str_len);
+//    if (buf == NULL || str_len > maxlen) {
+//        return NULL;
+//    }
+//
+//    *str = malloc(str_len + 1); /* +1 for NUL */
+//    if (*str == NULL) {
+//        return NULL;
+//    }
+//
+//    memcpy(*str, buf, str_len);
+//    (*str)[str_len] = 0;
+//
+//    return buf + str_len;
+//}
 
 uint8_t *
 ber_encode_null(uint8_t *out)
@@ -218,6 +236,8 @@ ber_decode_null(uint8_t *buf)
 {
     return buf + 2;
 }
+
+#if 0 // untested and unused
 
 struct ber_data {
     char type;
@@ -276,7 +296,7 @@ ber_fprintf(uint8_t *out, char *fmt, ...)
                 return NULL;
         }
     }
-    
+
     return out + 1;
 }
 
@@ -284,7 +304,7 @@ uint8_t *
 ber_sscanf(uint8_t *buf, char *fmt, ...)
 {
     va_list args;
-    const char *str;
+    char *str;
     uint32_t str_len;
 
     va_start(args, fmt);
@@ -303,6 +323,8 @@ ber_sscanf(uint8_t *buf, char *fmt, ...)
                     return NULL;
                 }
 
+                str = "";
+                str_len = 0;
                 buf = ber_decode_string_len_buffer(buf, &str, &str_len);
                 *va_arg(args, char **) = strndup(str, str_len);
                 break;
@@ -319,4 +341,5 @@ ber_sscanf(uint8_t *buf, char *fmt, ...)
 
     return buf;
 }
+#endif
 

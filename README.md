@@ -1,37 +1,31 @@
-# C99 BER codec
+# SNMPGet - mostly C but some ObjectiveC code to proble SNMPv1 device
 
-![Status](https://img.shields.io/badge/status-stable-green.svg)
-[![License](https://img.shields.io/github/license/darsto/ber.svg)](LICENSE)
+Based on the excellent cber project developed by Dariusz Stojaczyk. There were just a few minor issues with his code that were needed to allow multiple OID reading.
 
-Minimalistic ISO C99 codec for serializing data in ASN.1 BER format.
-It does not use any external dependencies.
+Dariusz Stojaczyk's originl code focused on the BER coding, and he hadn't really hyped how fully-featured his SNMPv1 code was. He is doing his project a great disservice but not doing that!
 
-For efficiency reasons, all data structures are being encoded backwards. Decoding is done as normal.
+With just a few minor changes I was able to adapt it to request a dozen or so OIDs at once!
 
-When encoding, the library doesn't protect against output buffer overflow. If necessary, all checks should be done by the user.
-
-When decoding, the amount of input buffer overflow checks is minimal.
-
-It is required that all input/output buffers should be at least **n** bytes before coding data. Please check the internal documentation in `ber.h` for details.
+As an addition to his code is an early version of a SNMPGet ObjectiveC class that creates ObjectiveC strings and numbers instead of C strings and binary number, and also has netrorking code that uses dispatch objects to wait for responses and to read the data. ["select" based code is also there and commented out.]
 
 ## Usage
 
 ```c
-int main(void) {
-    uint8_t buf[6] = {0}; /* initialized for showcase purposes, not necessary */
-    uint8_t *buf_end = buf + sizeof(buf) - 1;
-    uint8_t *enc_out, *dec_out;
-    uint32_t enc_num = 42, dec_num;
+SNMPGet *g = [[SNMPGet alloc] initWithAddress:@"192.168.7.101"];    // you supply the address
 
-    enc_out = ber_encode_int(buf_end, enc_num);
-    /* buf == { 0, 0, 0, 0x2, 0x1, 0x2a }, enc_out == &buf[2] */
-    dec_out = ber_decode_int(enc_out + 1, &dec_num);
+// Supply a list of defined objects in SNMPGet.m, or use their decimal dotted values
+// The strings make it easier to understand whats going on)
 
-    assert(dec_out == buf_end + 1);
-    assert(enc_num == dec_num);
+NSArray *array = @[
+    @"sysDescr",
+    @"sysUpTime",
+];
 
-    return 0;
-}
+[g probeOIDs:array];    // probe the list
+BOOL foo = [g readResponseWaitingDispatch:2];   // waiting 2 seconds here, results are in the SNMPGet object
+
+// Currently you can add log messages to see what is returned - see devices[@"192.168.7.101"]
+
 ```
 
 This library should be used directly inside the application. Simply copy the `ber.c` and `ber.h` files to your project.
