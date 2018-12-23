@@ -2,6 +2,8 @@
 
 Based on the excellent cber project developed by Dariusz Stojaczyk (https://github.com/darsto/cber). There were just a few minor issues with his code that were needed to allow multiple OID reading.
 
+This link contains a really short and useful explanation, format, and example of a simple SNMPv1 message: https://www.rane.com/note161.html, and was invaluable in understanding the snmp.c code.
+
 Dariusz Stojaczyk's originl code focused on the BER coding, and he hadn't really hyped how fully-featured his SNMPv1 code was. He is doing his project a great disservice by not doing that!
 
 With just a few minor changes I was able to adapt it to request a dozen or so OIDs at once!
